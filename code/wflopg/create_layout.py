@@ -2,7 +2,6 @@
 
 import numpy as _np
 import xarray as _xr
-import copy as _cp
 
 from wflopg.constants import COORDS
 import wflopg.helpers as _hs
