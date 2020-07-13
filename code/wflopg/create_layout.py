@@ -4,7 +4,6 @@ import numpy as _np
 import xarray as _xr
 
 from wflopg.constants import COORDS
-import wflopg.helpers as _hs
 from wflopg import create_site
 from wflopg import create_constraint
 
