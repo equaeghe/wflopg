@@ -1,0 +1,15 @@
+uuid: 5090f2b5-536c-48bb-b02f-fde4bfa2d2b4
+name: Problem for BWFS-IV in support of WES paper
+site: "site-BWFS-IV-simple.yaml"
+wind_resource: "../Mosetti_et_al/wind_resource-Mosetti_et_al.yaml"
+wind_direction_subdivisions: 10  # results in 360 1° bins
+turbine: "../IEA37_reference/turbine-IEA37_10MW-reference.yaml"
+turbine_distance: 4
+turbines: 50
+objective: "maximize expected power"
+wake_model:
+  wake_type: "linear top hat"
+  stream_tube_assumption: "rotor"
+  deficit_type: "Jensen"
+  averaging: true
+expansion_coefficient: 0.04
