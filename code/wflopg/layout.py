@@ -6,7 +6,7 @@ import wflopg.helpers as _hs
 
 class Layout():
     """A wind farm layout object.
-        
+
     Parameters
     ----------
     filename : str
@@ -18,7 +18,7 @@ class Layout():
         schema. It can be used both to override elements of
         the description given in `filename` or to define
         a wind farm layout in its entirety.
-        
+
     Attributes
     ----------
     STATE_TYPES : frozenset
@@ -54,10 +54,10 @@ class Layout():
         Set the positions of the layout.
     shift_positions(step):
         Shift the positions of the layout by a given step.
-        
+
     """
     STATE_TYPES = frozenset({'target', 'source', 'movable', 'context'})
-    
+
     def __init__(self, filename=None, **kwargs):
         """Create a wind farm layout object."""
         # TODO: add reference to actual wind farm layout schema
@@ -67,7 +67,7 @@ class Layout():
                 layout_dict.update(_hs.yaml_load(f))
         layout_dict.update(kwargs)
         # TODO: check layout_dict with schema using jsonschema
-        
+
         layout = layout_dict['layout']
         if isinstance(layout, _xr.core.dataset.Dataset):
             ds = layout
@@ -82,30 +82,30 @@ class Layout():
             for name, index in {('x', 0), ('y', 1)}:
                 ds[name] = ('pos', layout_array[:, index])
         self._state = ds
-            
+
         # TODO: add other layout_dict properties as attributes to self?
 
     def get_positions(self):
         """Get positions.
-        
+
         Returns
         -------
         An `xarray.Dataset` with `x` and `y` variables
         for absolute positions.
-        
+
         """
         return self._state[['x', 'y']]
 
     def set_positions(self, positions):
         """Set the positions of the layout.
-        
+
         Parameters
         ----------
         positions
             An `xarray.Dataset` with `x` and `y` `xarray.DataArray`s
             with a `pos` coordinate array containing a subset of
             positions present in the object's own `layout` attribute.
-        
+
         """
         try:
             del self._rel  # rel becomes outdated when layout is changed
@@ -125,30 +125,30 @@ class Layout():
 
     def shift_positions(self, step):
         """Shift the positions of the layout by a given step.
-        
+
         Parameters
         ----------
         step
             An `xarray.Dataset` with `x` and `y` `xarray.DataArray`s
             with a `pos` coordinate array containing a subset of
             positions present in the object's own `layout` attribute.
-        
+
         """
-        self.set_positions(self.positions.loc[dict(pos=step.pos)] + step)    
-    
+        self.set_positions(self.positions.loc[dict(pos=step.pos)] + step)
+
     def get_state(self, *args):
         """Get state information.
-        
+
         Parameters
         ----------
         args
             State identifiers of `'STATE_TYPES'`.
-        
+
         Returns
         -------
         An `xarray.Dataset` with the state information
         requested as member variables.
-        
+
         """
         illegal = set(args) - self.STATE_TYPES
         if illegal:
@@ -160,10 +160,10 @@ class Layout():
                              "defined for this layout. Use the ‘set_state’ "
                              "method for these first.")
         return self._state[list(args)]
-    
+
     def set_state(self, **kwargs):
         """Set state information.
-        
+
         Parameters
         ----------
         kwargs
@@ -171,7 +171,7 @@ class Layout():
             to state values. These can be either `bool`
             or `xarray.DataArray` with `bool` values and with
             the same dimensions as the layout's position variables.
-        
+
         """
         args = kwargs.keys()
         if not self.STATE_TYPES.issuperset(set(args)):
@@ -189,7 +189,7 @@ class Layout():
 
     def initialize_relative_positions(self, pos_from, pos_to):
         """Add and initialize relative positions data in object.
-        
+
         Parameters
         ----------
         pos_from
@@ -198,7 +198,7 @@ class Layout():
         pos_to
             Boolean array identifying positions
             to calculate relative positions to.
-        
+
         """
         ds = self._state
         self._rel = _xr.Dataset(
@@ -214,13 +214,13 @@ class Layout():
 
     def get_relative_positions(self):
         """Get and, as needed, calculate relative positions.
-            
+
         Returns
         -------
         An `xarray.Dataset` with `x` and `y` variables
         of relative positions, i.e., differences in coordinate
         values between two absolute positions.
-        
+
         """
         self._has_rel_check()
         if ('x' not in self._rel) or ('y' not in self._rel):
@@ -228,28 +228,28 @@ class Layout():
             self._rel.update(xy.sel(pos=self._rel['pos_to'])
                              - xy.sel(pos=self._rel['pos_from']))
         return self._rel[['x', 'y']]
-    
+
     def get_angles(self):
         """Get and, as needed, calculate angles between positions.
-            
+
         Returns
         -------
         An `xarray.DataArray` of angles between absolute positions.
-        
+
         """
         self._has_rel_check()
         if 'angle' not in self._rel:
             relxy = self.get_relative_positions()
             self._rel['angle'] = _np.arctan2(relxy.y, relxy.x)
-        return self._rel.angle    
+        return self._rel.angle
 
     def get_distances(self):
         """Get and, as needed, calculate distances between positions.
-            
+
         Returns
         -------
         An `xarray.DataArray` of distances between absolute positions.
-        
+
         """
         self._has_rel_check()
         if 'distance' not in self._rel:
@@ -260,14 +260,14 @@ class Layout():
 
     def get_normed_relative_positions(self):
         """Get and, as needed, calculate normed relative positions.
-            
+
         Returns
         -------
         An `xarray.Dataset` with `x` and `y` variables of
         normed relative positions, i.e., differences in
         coordinate values between two absolute positions
         normalized by the distance between them.
-        
+
         """
         self._has_rel_check()
         if ('x_normed' not in self._rel) or ('y_normed' not in self._rel):
@@ -280,11 +280,11 @@ class Layout():
     @classmethod
     def hexagonal(cls, turbines, acceptable):
         """Create hexagonal layout.
-        
+
         A hexagonal layout provides a densest packing of discs.
         So it can be used to create a regular layout with
         a relatively large distance between the turbines.
-        
+
         Parameters
         ----------
         turbines : int
@@ -298,10 +298,10 @@ class Layout():
             slightly outside the site may be acceptable, because
             they are used to generate border turbines in a
             subsequent processing step.
-        
+
         Returns
         -------
         A `Layout` object with the description of the hexagonal layout.
-        
+
         """
         return NotImplementedError
