@@ -8,8 +8,18 @@ from wflopg import create_site
 from wflopg import create_constraint
 
 
+def _rotation_matrix_from_angle(angle):
+    """Create rotation matrix corresponding to given angle"""
+    cos_angle = _np.cos(angle)
+    sin_angle = _np.sin(angle)
+    return _xr.DataArray(
+        _np.array([[cos_angle, -sin_angle], [sin_angle, cos_angle]]),
+        coords=[('uv', ['u', 'v']), ('xy', COORDS['xy'])]
+    )
+
+
 def hexagonal(turbines, site_parcels, site_violation_distance, to_border,
-              offset=None, angle=None):
+              offset=None, angle=None, randomize=False):
     """Create hexagonal—so densest—packing to cover site
 
     The `to_border` function must be the one applicable for the site.
@@ -18,22 +28,17 @@ def hexagonal(turbines, site_parcels, site_violation_distance, to_border,
     the first is the fraction for the basic distance between columns;
     the second is the fraction for the basic distance between rows.
 
+    The `angle` must be a real number, interpreted as an angle in radians.
+
+    Setting `randomize` to `'True'` randomizes the offset and angle after each
+    iteration of the algorithm
+
     """
-    if offset is None:
-        # create random offset
-        offset = _np.random.random(2)
-    if angle is None:
-        # create random rotation matrix
-        angle = _np.random.random() * _np.pi / 3  # hexgrid is π/3-symmetric
-    cos_angle = _np.cos(angle)
-    sin_angle = _np.sin(angle)
-    rotation_matrix = _xr.DataArray(
-        _np.array([[cos_angle, -sin_angle], [sin_angle, cos_angle]]),
-        coords=[('uv', ['u', 'v']), ('xy', COORDS['xy'])]
-    )
     # initialize algorithm parameters
     max_turbines = 0
     factor = 1
+    δ = offset
+    θ = angle
     # Process parcels
     hex_parcels = create_site.parcels(
         site_parcels, -site_violation_distance, rotor_constraint_override=True)
@@ -55,9 +60,16 @@ def hexagonal(turbines, site_parcels, site_violation_distance, to_border,
             _np.stack([mg[0].ravel(), mg[1].ravel()], axis=-1),
             dims=['target', 'uv'], coords={'uv': ['u', 'v']}
         )
+        if (δ is None) or (randomize and δ is not offset):
+            # create random offset
+            δ = _np.random.random(2)
+        if (θ is None) or (randomize and θ is not angle):
+            # create random rotation matrix
+            θ = _np.random.random() * _np.pi / 3  # hexgrid is π/3-symmetric
+        rotation_matrix = _rotation_matrix_from_angle(θ)
         # apply offset
         offset_step = _xr.DataArray(
-            offset * _np.array([x_step, y_step]), coords=[('uv', ['u', 'v'])])
+            δ * _np.array([x_step, y_step]), coords=[('uv', ['u', 'v'])])
         covering_layout += offset_step
         # apply rotation
         rotated_covering_layout = covering_layout.dot(rotation_matrix)
@@ -71,8 +83,8 @@ def hexagonal(turbines, site_parcels, site_violation_distance, to_border,
     print()
     #
     dense_layout.attrs['hex_distance'] = x_step
-    dense_layout.attrs['offset'] = offset
-    dense_layout.attrs['rotation_angle'] = angle
+    dense_layout.attrs['offset'] = δ
+    dense_layout.attrs['rotation_angle'] = θ
     return dense_layout + to_border(dense_layout)
 
 
