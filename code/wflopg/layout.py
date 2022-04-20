@@ -194,12 +194,14 @@ class Layout():
         ----------
         pos_from
             Boolean array identifying positions
-            to calculate relative positions from.
+            to calculate relative positions from (e.g, `'source'` turbines).
         pos_to
             Boolean array identifying positions
-            to calculate relative positions to.
+            to calculate relative positions to (e.g, `'target'` turbines).
 
         """
+        if pos_from is None:
+            return NotImplementedError
         ds = self._state
         self._rel = _xr.Dataset(
             coords={'pos_from': ds.pos[pos_from].rename({'pos': 'pos_from'}),
