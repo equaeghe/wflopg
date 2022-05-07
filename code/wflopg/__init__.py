@@ -33,7 +33,8 @@ class Owflop():
                                        for dim in {'xy', 'dc'}})
 
     def load_problem(self, filename,
-                     wind_resource=None, layout=None, wake_model=None,
+                     site=None, wind_resource=None, wake_model=None,
+                     layout=None,
                      turbine_distance=None):
         """Load wind farm layout optimization problem file
 
@@ -56,10 +57,16 @@ class Owflop():
 
         # extract and process information and data from linked documents
         self.load_turbine(problem['turbine'])
-        self.load_site(problem['site'])
-        self.rotor_radius_adim = self.rotor_radius / self.site_radius
-        self.rotor_diameter_adim = 2 * self.rotor_radius_adim
-        self.process_turbine()
+        site_file = problem['site']
+        if isinstance(site, str):
+            site_file = site
+        elif isinstance(site, dict):
+            if 'filename' in site:
+                site_file = site['filename']
+                del site['filename']
+            site_options = site
+        self.load_site(site_file, site_options)
+        self.process_turbine(self.site_radius)
         self.process_site()
         wind_resource_options = {}
         if 'wind_direction_subdivisions' in problem:
@@ -163,7 +170,10 @@ class Owflop():
                              "a 'thrust_curve' or "
                              "a constant 'thrust_coefficient'")
 
-    def process_turbine(self):
+    def process_turbine(self, site_radius):
+        # define adimensional rotor parameters
+        self.rotor_radius_adim = self.rotor_radius / site_radius
+        self.rotor_diameter_adim = 2 * self.rotor_radius_adim
         # define power curve
         if self.power_curve_data is not None:
             self.power_curve = create_turbine.interpolated_power_curve(
@@ -181,9 +191,10 @@ class Owflop():
             self.thrust_curve = create_turbine.constant_thrust_curve(
                 self.cut_in, self.cut_out, self.thrust_coefficient)
 
-    def load_site(self, filename):
+    def load_site(self, filename, options):
         with open(filename) as f:
             site = _yaml_load(f)
+        site.update(options)
         self.roughness_length = site.get('roughness', None)
         self.site_radius = site['radius'] * 1e3  # km to m
         if 'location' in site:
