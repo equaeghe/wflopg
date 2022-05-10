@@ -73,7 +73,7 @@ class Layout():
             ds = layout
         else:
             if isinstance(layout, list):
-                layout_array = _np.array(layout_dict['layout'])
+                layout_array = _np.array(layout)
             elif isinstance(layout, _np.ndarray):
                 layout_array = layout
             else:
