@@ -187,21 +187,25 @@ class Layout():
                                  f"for state ‘{state}’: ‘{val}’.")
             self._state[state] = da
 
-    def initialize_relative_positions(self, pos_from, pos_to):
+    def initialize_relative_positions(self, pos_from=None, pos_to=None):
         """Add and initialize relative positions data in object.
 
         Parameters
         ----------
         pos_from
             Boolean array identifying positions
-            to calculate relative positions from (e.g, `'source'` turbines).
+            to calculate relative positions from
+            (`'source'` turbines by default).
         pos_to
             Boolean array identifying positions
-            to calculate relative positions to (e.g, `'target'` turbines).
+            to calculate relative positions to
+            (`'target'` turbines by default).
 
         """
         if pos_from is None:
-            return NotImplementedError
+            pos_from = self._state.source
+        if pos_to is None:
+            pos_to = self._state.target
         ds = self._state
         self._rel = _xr.Dataset(
             coords={'pos_from': ds.pos[pos_from].rename({'pos': 'pos_from'}),
