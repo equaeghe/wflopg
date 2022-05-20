@@ -284,6 +284,57 @@ class Layout():
         return self._rel[['x_normed', 'y_normed']]
 
     @classmethod
+    def parallelogram(cls, turbines, acceptable, ratio=None, angle=None,
+                      shift=None, rotation=None, randomize=False):
+        """Create parallelogram layout.
+
+        A parallelogram layout is a flexibly parametrizable regular grid.
+        So it can be used to create a wide class of regular layouts.
+
+        The layout is basically defined by the ratio of two parallelogram
+        sides attached to the origin and an angle between them.
+        The grid created by tiling the plane with parallelograms
+        can be rotated and shifted.
+
+        Parameters
+        ----------
+        turbines : int
+            The (positive) number of turbines needed in the layout.
+        acceptable
+            A function that maps a `Layout` to a boolean
+            `xarray.DataArray` that indicates which turbines
+            are to be considered acceptable. Usually this will
+            be the turbines inside the site considered, but it
+            may also be different. For example, also turbines
+            slightly outside the site may be acceptable, because
+            they are used to generate border turbines in a
+            subsequent processing step.
+        ratio : float
+            The (positive) ratio between the most clockwise side and
+            most counterclockwise side.
+            Random if `None`.
+        angle : float
+            The (positive) angle in degrees between the sides.
+            Random if `None`.
+        shift : (float, float)
+            The shift of the origin of the grid as fractions of side lengths,
+            so between 0 (inclusive) and 1 (exclusive).
+            Random if `None`.
+        rotation : float
+            The rotation in degrees of the bisector of the two sides.
+            Random if `None`.
+        randomize : Boolean
+            Whether or not to randomize the shift and rotation
+            each iteration of the algorithm. (Improves convergence.)
+
+        Returns
+        -------
+        A `Layout` object with the description of the parallelogram layout.
+
+        """
+        return NotImplementedError
+
+    @classmethod
     def hexagonal(cls, turbines, acceptable):
         """Create hexagonal layout.
 
