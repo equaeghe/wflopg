@@ -463,3 +463,50 @@ class Layout():
         return cls.parallelogram(turbines, acceptable,
                                  shift=shift, rotation=rotation,
                                  randomize=randomize)
+
+    @classmethod
+    def radial(cls, distances, angles, rotation=None):
+        """Create radial layout.
+
+        A radial layout provides a natural grid around a central turbine.
+        This layout was conceived for use in generating a so-called
+        pre-averaged model, which encodes the effect of the central turbine on
+        any other turbine in its surrounding. Therefore, a dense grid is
+        typical, which can be used for interpolation.
+
+        Parameters
+        ----------
+        distances : int or list(float)
+            If an integer, the number of equidistant radial distances r
+            considered. (Because of its use in the pre-averaged model, 0<r≤2.)
+            If a list of floats, these floats should give the distances desired.
+        angles : int or list(float)
+            If an integer, the number of equidistant directions θ considered.
+            If a list of floats, these floats should give the directions desired
+            (in radians).
+        rotation : float
+            The rotation φ in radians of the grid (0<φ<2⋅π).
+            Random if `None`.
+
+        Returns
+        -------
+        A `Layout` object with the description of the radial layout.
+
+        """
+        if isinstance(distances, int):
+            distances = _np.linspace(2, 0, distances, endpoint=False)
+        if isinstance(angles, int):
+            angles = 2 * _np.pi * _np.linspace(0, 1, angles, endpoint=False)
+        if rotation is None:
+            rng = _np.random.default_rng()
+            rotation = 2 * _np.pi * rng.random()
+        angles = _np.remainder(angles + rotation, 2 * _np.pi)
+        """Create radial grid"""
+        proposal = xr.Dataset(coords={'r': distances, 'theta': angles})
+        proposal = proposal.assign(x=proposal.r * _np.cos(proposal.theta),
+                                   y=proposal.r * _np.sin(proposal.theta))
+        origin = xr.Dataset(coords={'r': [0.], 'theta': [_np.nan]})
+        origin = origin.assign(x=(('r', 'theta'), [[0.]]),
+                               y=(('r', 'theta'), [[0.]]))
+        return cls.Layout(_xr.concat([ds.stack(pos=('r', 'theta'))
+                                      for ds in [proposal, origin]], 'pos'))
