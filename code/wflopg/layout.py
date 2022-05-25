@@ -361,9 +361,6 @@ class Layout():
             col_sep *= scale
             row_sep *= scale
             row_shift *= scale
-            """Define function that generate grid coordinates"""
-            def ij2xy(i, j):
-                return (i * col_sep + j * row_shift, j * row_sep)
             """Calculation of k that determine row and column count (2⋅k+1)"""
             k_CW = _np.ceil(1 / col_sep)
             k_CWW = _np.ceil(1 / row_sep)
@@ -371,8 +368,10 @@ class Layout():
             proposal = xr.Dataset(coords={'i': _np.arange(-k_CW, k_CW+1),
                                           'j': _np.arange(-k_CCW, k_CCW+1)})
             """Calculation of grid coordinates"""
-            proposal['x'] = xr.apply_ufunc(ij2x, proposal.i, proposal.j)
-            proposal['y'] = xr.apply_ufunc(ij2y, proposal.i, proposal.j)
+            proposal = proposal.assign(
+                x=proposal.i * col_sep + proposal.j * row_shift,
+                y=proposal.j * row_sep
+            )
             """Flatten data structure and create initial layout"""
             layout = cls.Layout(proposal.stack(pos=('i', 'j')))
             """Apply grid shift and grid rotation"""
