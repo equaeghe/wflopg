@@ -284,7 +284,7 @@ class Layout():
         return self._rel[['x_normed', 'y_normed']]
 
     @classmethod
-    def parallelogram(cls, turbines, acceptable, ratio=None, angle=None,
+    def parallelogram(cls, turbines, acceptable, ratio=1, angle=_np.pi/3,
                       shift=None, rotation=None, randomize=False):
         """Create parallelogram layout.
 
@@ -299,7 +299,7 @@ class Layout():
         Parameters
         ----------
         turbines : int
-            The (positive) number of turbines needed in the layout.
+            The (positive) number of turbines n needed in the layout.
         acceptable
             A function that maps a `Layout` to a boolean
             `xarray.DataArray` that indicates which turbines
@@ -310,32 +310,121 @@ class Layout():
             they are used to generate border turbines in a
             subsequent processing step.
         ratio : float
-            The (positive) ratio between the most clockwise side and
-            most counterclockwise side.
-            Random if `None`.
+            The (positive) ratio ρ between the most clockwise (CW) side and
+            most counterclockwise (CCW) side (0<ρ≤1 without loss of generality).
         angle : float
-            The (positive) angle in degrees between the sides.
-            Random if `None`.
+            The (positive) angle α in radians between the sides (0<α<π).
         shift : (float, float)
-            The shift of the origin of the grid as fractions of side lengths,
-            so between 0 (inclusive) and 1 (exclusive).
-            Random if `None`.
+            The shift (s_CW,s_CCW) of the origin of the grid as fractions of
+            side lengths (0≤s_CW,s_CCW<1).
+            Random initialization if `None`.
         rotation : float
-            The rotation in degrees of the bisector of the two sides.
-            Random if `None`.
+            The rotation φ in radians of the grid (0<φ<π).
+            Random initialization if `None`.
         randomize : Boolean
-            Whether or not to randomize the shift and rotation
-            each iteration of the algorithm. (Improves convergence.)
+            Whether or not to randomize the shift and rotation if the algorithm
+            seems stuck. (Improves convergence.)
 
         Returns
         -------
         A `Layout` object with the description of the parallelogram layout.
 
         """
-        return NotImplementedError
+        """Initialize algorithm parameters"""
+        iteration = 0
+        scale = 1
+        separation = 1
+        rng = _np.random.default_rng()
+        if shift is None:
+            shift = rng.random(2)
+        if rotation is None:
+            rotation = rng.random() * _np.pi
+        """Calculation of initial parallelogram edge lengths
+
+        Let d denote the CW edge length of a parallelogram cell.
+        Then the CCW edge length is ρ⋅d.
+        So each parallelogram cell has an area ρ⋅d²⋅sin(α).
+        The site is contained in a disc of surface π (radius 1 by convention).
+        Each cells contributes one turbine to the layout, up to border cases.
+        So approximately we should have that n⋅ρ⋅d²⋅sin(α)=π, or
+        d = √(π/(n⋅ρ⋅sin(α))).
+
+        """
+        d = _np.sqrt(_np.pi / (turbines * ratio * _np.sin(angle)))
+        rhod = ratio * d
+        col_sep = d
+        row_sep = rhod * _np.sin(angle)
+        row_shift = rhod * _np.cos(angle)
+        """Run loop to find working scale, shift, and rotation"""
+        while True:
+            """Scale grid lengths with current scale estimate"""
+            col_sep *= scale
+            row_sep *= scale
+            row_shift *= scale
+            """Define function that generate grid coordinates"""
+            def ij2xy(i, j):
+                return (i * col_sep + j * row_shift, j * row_sep)
+            """Calculation of k that determine row and column count (2⋅k+1)"""
+            k_CW = _np.ceil(1 / col_sep)
+            k_CWW = _np.ceil(1 / row_sep)
+            """Define grid row and column indices"""
+            proposal = xr.Dataset(coords={'i': _np.arange(-k_CW, k_CW+1),
+                                          'j': _np.arange(-k_CCW, k_CCW+1)})
+            """Calculation of grid coordinates"""
+            proposal['x'] = xr.apply_ufunc(ij2x, proposal.i, proposal.j)
+            proposal['y'] = xr.apply_ufunc(ij2y, proposal.i, proposal.j)
+            """Flatten data structure and create initial layout"""
+            layout = cls.Layout(proposal.stack(pos=('i', 'j')))
+            """Apply grid shift and grid rotation"""
+            layout['x'] += shift[0] * col_sep
+            layout['y'] += shift[1] * row_sep
+            rot_cos = _np.cos(rotation)
+            rot_sin = _np.sin(rotation)
+            rotated_x = layout.x * rot_cos - layout.y * rot_sin
+            rotated_y = layout.x * rot_sin + layout.y * rot_cos
+            layout['x'] = rotated_x
+            layout['y'] = rotated_y
+            """Determine whether layout has the right number of turbines"""
+            in_site = acceptable(layout)
+            actual_turbines = sum(in_site)
+            if actual_turbines == turbines:
+                break
+            """Update algorithm parameters if the turbine number is off"""
+            iteration += 1
+            factor = actual_turbines / turbines
+            scale *= _np.sqrt(factor) # scale area linearly
+            """Update shift and rotation to improve convergence
+
+            It may happen for some shift and rotation values that the algorithm
+            gets stuck looping between the same scale factors that do not
+            correspond to a solution. To avoid that, adding some random drift to
+            these parameters can help.
+
+            We use a crude heuristic to determine whether the algorithm is
+            stuck. Namely, a symptom is that the actual turbine count is close
+            to the desired count. So we keep track of a geometric mean
+            (‘separation’) of the absolute difference between them, where half
+            the weight is put on the current difference and half on the previous
+            mean distance. This mean is then checked against a threshold that
+            increases with the number of iterations, which makes it more likely
+            to add drift for higher iteration numbers, also a symptom of being
+            stuck.
+
+            The standard deviation of the drift is inversely proportional to the
+            desired turbine count. This is a gut-feeling heuristic.
+
+            """
+            separation = _np.sqrt(separation * _np.abs(factor - 1))
+            if randomize and separation < _np.tanh(iteration / turbines):
+                shift = _np.remainder(
+                    shift + rng.normal(scale=1/turbines, size=2), 1)
+                rotation = _np.remainder(
+                    rotation + rng.normal(scale=_np.pi/turbines), _np.pi)
+        return layout[in_site]
 
     @classmethod
-    def hexagonal(cls, turbines, acceptable):
+    def hexagonal(cls, turbines, acceptable,
+                  shift=None, rotation=None, randomize=False):
         """Create hexagonal layout.
 
         A hexagonal layout provides a densest packing of discs.
@@ -345,7 +434,7 @@ class Layout():
         Parameters
         ----------
         turbines : int
-            The number of turbines needed in the layout.
+            The (positive) number of turbines n needed in the layout.
         acceptable
             A function that maps a `Layout` to a boolean
             `xarray.DataArray` that indicates which turbines
@@ -355,10 +444,22 @@ class Layout():
             slightly outside the site may be acceptable, because
             they are used to generate border turbines in a
             subsequent processing step.
+        shift : (float, float)
+            The shift (s_CW,s_CCW) of the origin of the grid as fractions of
+            side lengths (0≤s_CW,s_CCW<1).
+            Random if `None`.
+        rotation : float
+            The rotation φ in radians of the grid (0<φ<π).
+            Random if `None`.
+        randomize : Boolean
+            Whether or not to randomize the shift and rotation if the algorithm
+            seems stuck. (Improves convergence.)
 
         Returns
         -------
         A `Layout` object with the description of the hexagonal layout.
 
         """
-        return NotImplementedError
+        return cls.parallelogram(turbines, acceptable,
+                                 shift=shift, rotation=rotation,
+                                 randomize=randomize)
