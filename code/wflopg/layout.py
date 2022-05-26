@@ -311,7 +311,8 @@ class Layout():
             subsequent processing step.
         ratio : float
             The (positive) ratio ρ between the most clockwise (CW) side and
-            most counterclockwise (CCW) side (0<ρ≤1 without loss of generality).
+            most counterclockwise (CCW) side (0<ρ≤1 without loss of
+            generality).
         angle : float
             The (positive) angle α in radians between the sides (0<α<π).
         shift : (float, float)
@@ -363,10 +364,10 @@ class Layout():
             row_shift *= scale
             """Calculation of k that determine row and column count (2⋅k+1)"""
             k_CW = _np.ceil(1 / col_sep)
-            k_CWW = _np.ceil(1 / row_sep)
+            k_CCW = _np.ceil(1 / row_sep)
             """Define grid row and column indices"""
-            proposal = xr.Dataset(coords={'i': _np.arange(-k_CW, k_CW+1),
-                                          'j': _np.arange(-k_CCW, k_CCW+1)})
+            proposal = _xr.Dataset(coords={'i': _np.arange(-k_CW, k_CW+1),
+                                           'j': _np.arange(-k_CCW, k_CCW+1)})
             """Calculation of grid coordinates"""
             proposal = proposal.assign(
                 x=proposal.i * col_sep + proposal.j * row_shift,
@@ -391,26 +392,26 @@ class Layout():
             """Update algorithm parameters if the turbine number is off"""
             iteration += 1
             factor = actual_turbines / turbines
-            scale *= _np.sqrt(factor) # scale area linearly
+            scale *= _np.sqrt(factor)  # scale area linearly
             """Update shift and rotation to improve convergence
 
-            It may happen for some shift and rotation values that the algorithm
-            gets stuck looping between the same scale factors that do not
-            correspond to a solution. To avoid that, adding some random drift to
-            these parameters can help.
+            It may happen for some shift and rotation values that the
+            algorithm gets stuck looping between the same scale factors that do
+            not correspond to a solution. To avoid that, adding some random
+            drift to these parameters can help.
 
             We use a crude heuristic to determine whether the algorithm is
             stuck. Namely, a symptom is that the actual turbine count is close
             to the desired count. So we keep track of a geometric mean
             (‘separation’) of the absolute difference between them, where half
-            the weight is put on the current difference and half on the previous
-            mean distance. This mean is then checked against a threshold that
-            increases with the number of iterations, which makes it more likely
-            to add drift for higher iteration numbers, also a symptom of being
-            stuck.
+            the weight is put on the current difference and half on the
+            previous mean distance. This mean is then checked against a
+            threshold that increases with the number of iterations, which makes
+            it more likely to add drift for higher iteration numbers, also a
+            symptom of being stuck.
 
-            The standard deviation of the drift is inversely proportional to the
-            desired turbine count. This is a gut-feeling heuristic.
+            The standard deviation of the drift is inversely proportional to
+            the desired turbine count. This is a gut-feeling heuristic.
 
             """
             separation = _np.sqrt(separation * _np.abs(factor - 1))
@@ -478,11 +479,12 @@ class Layout():
         distances : int or list(float)
             If an integer, the number of equidistant radial distances r
             considered. (Because of its use in the pre-averaged model, 0<r≤2.)
-            If a list of floats, these floats should give the distances desired.
+            If a list of floats, these floats should give the distances
+            desired.
         angles : int or list(float)
             If an integer, the number of equidistant directions θ considered.
-            If a list of floats, these floats should give the directions desired
-            (in radians).
+            If a list of floats, these floats should give the directions
+            desired (in radians).
         rotation : float
             The rotation φ in radians of the grid (0<φ<2⋅π).
             Random if `None`.
@@ -501,10 +503,10 @@ class Layout():
             rotation = 2 * _np.pi * rng.random()
         angles = _np.remainder(angles + rotation, 2 * _np.pi)
         """Create radial grid"""
-        proposal = xr.Dataset(coords={'r': distances, 'theta': angles})
+        proposal = _xr.Dataset(coords={'r': distances, 'theta': angles})
         proposal = proposal.assign(x=proposal.r * _np.cos(proposal.theta),
                                    y=proposal.r * _np.sin(proposal.theta))
-        origin = xr.Dataset(coords={'r': [0.], 'theta': [_np.nan]})
+        origin = _xr.Dataset(coords={'r': [0.], 'theta': [_np.nan]})
         origin = origin.assign(x=(('r', 'theta'), [[0.]]),
                                y=(('r', 'theta'), [[0.]]))
         return cls.Layout(_xr.concat([ds.stack(pos=('r', 'theta'))
