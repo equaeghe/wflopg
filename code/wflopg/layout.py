@@ -40,20 +40,24 @@ class Layout():
     -------
     get_positions()
         Get positions.
+    set_positions(positions):
+        Set the positions of the layout.
     initialize_relative_positions(pos_from, pos_to)
         Add and initialize relative positions data in object.
     get_relative_positions()
         Get and, as needed, calculate relative positions.
+    get_normed_relative_positions():
+        Get and, as needed, calculate normed relative positions.
     get_angles()
         Get and, as needed, calculate angles between locations.
     get_distances()
         Get and, as needed, calculate distances between locations.
-    get_normed_relative_positions():
-        Get and, as needed, calculate normed relative positions.
-    set_positions(positions):
-        Set the positions of the layout.
     shift_positions(step):
         Shift the positions of the layout by a given step.
+    get_state(*args):
+        Get state information.
+    set_state(**kwargs)
+        Set state information.
 
     """
     STATE_TYPES = frozenset({'target', 'source', 'movable', 'context'})
@@ -418,7 +422,9 @@ class Layout():
                     shift + rng.normal(scale=1/turbines, size=2), 1)
                 rotation = _np.remainder(
                     rotation + rng.normal(scale=_np.pi/turbines), _np.pi)
-        return layout[in_site]
+        layout = layout[in_site]
+        layout.set_state(target=True, source=True)
+        return layout
 
     @classmethod
     def hexagonal(cls, turbines, acceptable,
@@ -507,5 +513,9 @@ class Layout():
         origin = _xr.Dataset(coords={'r': [0.], 'theta': [_np.nan]})
         origin = origin.assign(x=(('r', 'theta'), [[0.]]),
                                y=(('r', 'theta'), [[0.]]))
-        return cls.Layout(_xr.concat([ds.stack(pos=('r', 'theta'))
-                                      for ds in [grid, origin]], 'pos'))
+        layout = cls.Layout(_xr.concat([ds.stack(pos=('r', 'theta'))
+                                        for ds in [grid, origin]], 'pos'))
+        all_but_origin = _xr.full_like(layout.pos, True, bool)
+        all_but_origin.loc[dict(pos=(0., _np_nan)] = False
+        layout.set_state(target=all_but_origin, source=~all_but_origin)
+        return layout
