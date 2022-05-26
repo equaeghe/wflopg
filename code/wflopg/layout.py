@@ -366,24 +366,22 @@ class Layout():
             k_CW = _np.ceil(1 / col_sep)
             k_CCW = _np.ceil(1 / row_sep)
             """Define grid row and column indices"""
-            proposal = _xr.Dataset(coords={'i': _np.arange(-k_CW, k_CW+1),
-                                           'j': _np.arange(-k_CCW, k_CCW+1)})
+            grid = _xr.Dataset(coords={'i': _np.arange(-k_CW, k_CW+1),
+                                       'j': _np.arange(-k_CCW, k_CCW+1)})
             """Calculation of grid coordinates"""
-            proposal = proposal.assign(
-                x=proposal.i * col_sep + proposal.j * row_shift,
-                y=proposal.j * row_sep
+            grid = grid.assign(
+                x=grid.i * col_sep + grid.j * row_shift,
+                y=grid.j * row_sep
             )
             """Flatten data structure and create initial layout"""
-            layout = cls.Layout(proposal.stack(pos=('i', 'j')))
-            """Apply grid shift and grid rotation"""
-            layout['x'] += shift[0] * col_sep
-            layout['y'] += shift[1] * row_sep
+            layout = cls.Layout(grid.stack(pos=('i', 'j')))
+            """Apply grid rotation and grid shift"""
             rot_cos = _np.cos(rotation)
             rot_sin = _np.sin(rotation)
-            rotated_x = layout.x * rot_cos - layout.y * rot_sin
-            rotated_y = layout.x * rot_sin + layout.y * rot_cos
-            layout['x'] = rotated_x
-            layout['y'] = rotated_y
+            layout['x'], layout['y'] = (
+                layout.x * rot_cos - layout.y * rot_sin + shift[0] * col_sep,
+                layout.x * rot_sin + layout.y * rot_cos + shift[1] * row_sep
+            )
             """Determine whether layout has the right number of turbines"""
             in_site = acceptable(layout)
             actual_turbines = sum(in_site)
@@ -503,11 +501,11 @@ class Layout():
             rotation = 2 * _np.pi * rng.random()
         angles = _np.remainder(angles + rotation, 2 * _np.pi)
         """Create radial grid"""
-        proposal = _xr.Dataset(coords={'r': distances, 'theta': angles})
-        proposal = proposal.assign(x=proposal.r * _np.cos(proposal.theta),
-                                   y=proposal.r * _np.sin(proposal.theta))
+        grid = _xr.Dataset(coords={'r': distances, 'theta': angles})
+        grid = grid.assign(x=grid.r * _np.cos(grid.theta),
+                           y=grid.r * _np.sin(grid.theta))
         origin = _xr.Dataset(coords={'r': [0.], 'theta': [_np.nan]})
         origin = origin.assign(x=(('r', 'theta'), [[0.]]),
                                y=(('r', 'theta'), [[0.]]))
         return cls.Layout(_xr.concat([ds.stack(pos=('r', 'theta'))
-                                      for ds in [proposal, origin]], 'pos'))
+                                      for ds in [grid, origin]], 'pos'))
