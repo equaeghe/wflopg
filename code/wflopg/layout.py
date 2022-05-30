@@ -42,7 +42,7 @@ class Layout():
         Get positions.
     set_positions(positions):
         Set the positions of the layout.
-    initialize_relative_positions(pos_from, pos_to)
+    initialize_relative_positions(index_from, index_to)
         Add and initialize relative positions data in object.
     get_relative_positions()
         Get and, as needed, calculate relative positions.
@@ -71,21 +71,22 @@ class Layout():
                 layout_dict.update(_hs.yaml_load(f))
         layout_dict.update(kwargs)
         # TODO: check layout_dict with schema using jsonschema
-
         layout = layout_dict['layout']
-        if isinstance(layout, _xr.core.dataset.Dataset):
-            ds = layout
+        if isinstance(layout, _xr.Dataset):
+            self.absolute = layout
+            return None
+        if isinstance(layout, list):
+            layout_array = _np.array(layout)
+        elif isinstance(layout, _np.ndarray):
+            layout_array = layout
         else:
-            if isinstance(layout, list):
-                layout_array = _np.array(layout)
-            elif isinstance(layout, _np.ndarray):
-                layout_array = layout
-            else:
-                raise ValueError(f"Incorrect type of layout: {layout}.")
-            ds = _xr.Dataset(coords={'pos': range(len(layout_array))})
-            for name, index in {('x', 0), ('y', 1)}:
-                ds[name] = ('pos', layout_array[:, index])
-        self._state = ds
+            raise ValueError(f"Incorrect type of layout: {layout}.")
+        self.absolute = _xr.Dataset()
+        self.absolute['index'] = layout_dict.get('index', range(len(layout)))
+        for name, column in {('x', 0), ('y', 1)}:
+            self.absolute[name] = ('index', layout_array[:, column])
+        for state in layout_dict.keys() & self.STATE_TYPES:
+            self.absolute[state] = ('index', layout_dict[state])
 
         # TODO: add other layout_dict properties as attributes to self?
 
@@ -98,7 +99,7 @@ class Layout():
         for absolute positions.
 
         """
-        return self._state[['x', 'y']]
+        return self.absolute[['x', 'y']]
 
     def set_positions(self, positions):
         """Set the positions of the layout.
@@ -107,18 +108,19 @@ class Layout():
         ----------
         positions
             An `xarray.Dataset` with `x` and `y` `xarray.DataArray`s
-            with a `pos` coordinate array containing a subset of
-            positions present in the object's own `layout` attribute.
+            with an `index` coordinate array containing a subset of
+            indices present in the object's `absolute` `xarray.Dataset` itself.
 
         """
         try:
-            del self._rel  # rel becomes outdated when layout is changed
+            del self.relative  # relative becomes outdated when layout changes
         except AttributeError:
             pass
-        if not self._state.movable.sel(pos=positions.pos).all():
+        if not self.absolute.movable.sel(index=positions.index).all():
             raise IndexError("You may not change non-movable turbines.")
-        for z in {'x', 'y'}:
-            self._state[z].loc[dict(pos=positions.pos)] = positions[z]
+        for name in {'x', 'y'}:
+            self.absolute[name].loc[dict(index=positions.index)] = (
+                positions[name])
         # TODO: do this in one go with
         #
         #   self._state = positions.combine_first(self._state)
@@ -134,11 +136,11 @@ class Layout():
         ----------
         step
             An `xarray.Dataset` with `x` and `y` `xarray.DataArray`s
-            with a `pos` coordinate array containing a subset of
-            positions present in the object's own `layout` attribute.
+            with an `index` coordinate array containing a subset of
+            indices present in the object's `absolute` `xarray.Dataset` itself.
 
         """
-        self.set_positions(self.positions.loc[dict(pos=step.pos)] + step)
+        self.set_positions(self.absolute.sel(index=step.index) + step)
 
     def get_state(self, *args):
         """Get state information.
@@ -158,12 +160,12 @@ class Layout():
         if illegal:
             raise ValueError(f"The arguments {illegal} are illegal types, "
                              f"i.e., not in {self.STATE_TYPES}.")
-        undefined = set(args) - set(self._state.keys())
+        undefined = set(args) - set(self.absolute.data_vars)
         if undefined:
             raise ValueError(f"The arguments {undefined} are not currently "
                              "defined for this layout. Use the ‘set_state’ "
                              "method for these first.")
-        return self._state[list(args)]
+        return self.absolute[list(args)]
 
     def set_state(self, **kwargs):
         """Set state information.
@@ -173,8 +175,8 @@ class Layout():
         kwargs
             A mapping from state identifiers of `'STATE_TYPES'`
             to state values. These can be either `bool`
-            or `xarray.DataArray` with `bool` values and with
-            the same dimensions as the layout's position variables.
+            or `xarray.DataArray` with `bool` values with the same `index`
+            coordinate as the object's `absolute` `xarray.Dataset` itself.
 
         """
         args = kwargs.keys()
@@ -182,45 +184,42 @@ class Layout():
             raise ValueError(f"The arguments given, {args}, includes illegal "
                              f"types, i.e., not in {self.STATE_TYPES}.")
         for state, val in kwargs.items():
-            if isinstance(val, _xr.core.dataarray.DataArray):
-                da = val
+            if isinstance(val, _xr.DataArray):
+                self.absolute[state] = val
             elif isinstance(val, bool):
-                da = _xr.full_like(self._state.pos, val, dtype=bool)
+                self.absolute[state] = _xr.full_like(self.absolute.index, val,
+                                                     dtype=bool)
             else:
                 raise ValueError("Incorrect type of description "
                                  f"for state ‘{state}’: ‘{val}’.")
-            self._state[state] = da
 
-    def initialize_relative_positions(self, pos_from=None, pos_to=None):
+    def initialize_relative_positions(self, index_from=None, index_to=None):
         """Add and initialize relative positions data in object.
 
         Parameters
         ----------
-        pos_from
-            Boolean array identifying positions
+        index_from
+            Boolean array identifying indices
             to calculate relative positions from
             (`'source'` turbines by default).
-        pos_to
-            Boolean array identifying positions
+        index_to
+            Boolean array identifying indices
             to calculate relative positions to
             (`'target'` turbines by default).
 
         """
-        if pos_from is None:
-            pos_from = self._state.source
-        if pos_to is None:
-            pos_to = self._state.target
-        ds = self._state
-        self._rel = _xr.Dataset(
-            coords={'pos_from': ds.pos[pos_from].rename({'pos': 'pos_from'}),
-                    'pos_to': ds.pos[pos_to].rename({'pos': 'pos_to'})}
-        )
+        if index_from is None:
+            index_from = self.absolute.source
+        if index_to is None:
+            index_to = self.absolute.target
+        self.relative = _xr.Dataset()
+        self.relative['index_from'] = index_from.values
+        self.relative['index_to'] = index_to.values
 
     def _has_rel_check(self):
-        """Raise AttributeError if the _rel attribute is not present."""
-        if not hasattr(self, '_rel'):
-            raise AttributeError(
-                "Call the ‘initialize_relative_positions’ method first.")
+        """Initialize to defaults if `relative` attribute is not present."""
+        if not hasattr(self, 'relative'):
+            self.initialize_relative_positions()
 
     def get_relative_positions(self):
         """Get and, as needed, calculate relative positions.
@@ -233,11 +232,11 @@ class Layout():
 
         """
         self._has_rel_check()
-        if ('x' not in self._rel) or ('y' not in self._rel):
-            xy = self.get_positions()
-            self._rel.update(xy.sel(pos=self._rel['pos_to'])
-                             - xy.sel(pos=self._rel['pos_from']))
-        return self._rel[['x', 'y']]
+        if not {'x', 'y'}.issubset(self.relative.data_vars):
+            xy = self.absolute.get_positions()
+            self.relative.update(xy.sel(index=self.relative.index_from)
+                                 - xy.sel(index=self.relative.index_to))
+        return self.relative[['x', 'y']]
 
     def get_angles(self):
         """Get and, as needed, calculate angles between positions.
@@ -248,10 +247,10 @@ class Layout():
 
         """
         self._has_rel_check()
-        if 'angle' not in self._rel:
+        if 'angle' not in self.relative.data_vars:
             relxy = self.get_relative_positions()
-            self._rel['angle'] = _np.arctan2(relxy.y, relxy.x)
-        return self._rel.angle
+            self.relative['angle'] = _np.arctan2(relxy.y, relxy.x)
+        return self.relative.angle
 
     def get_distances(self):
         """Get and, as needed, calculate distances between positions.
@@ -262,11 +261,11 @@ class Layout():
 
         """
         self._has_rel_check()
-        if 'distance' not in self._rel:
+        if 'distance' not in self.relative.data_vars:
             relxy = self.get_relative_positions()
-            self._rel['distance'] = _np.sqrt(
+            self.relative['distance'] = _np.sqrt(
                 _np.square(relxy.x) + _np.square(relxy.y))
-        return self._rel.distance
+        return self.relative.distance
 
     def get_normed_relative_positions(self):
         """Get and, as needed, calculate normed relative positions.
@@ -280,12 +279,12 @@ class Layout():
 
         """
         self._has_rel_check()
-        if ('x_normed' not in self._rel) or ('y_normed' not in self._rel):
+        if not {'x_normed', 'y_normed'}.issubset(self.relative.data_vars):
             relxy = self.get_relative_positions()
             dists = self.get_distances()
-            self._rel.update(
+            self.relative.update(
                 (relxy / dists).rename({'x': 'x_normed', 'y': 'y_normed'}))
-        return self._rel[['x_normed', 'y_normed']]
+        return self.relative[['x_normed', 'y_normed']]
 
     @classmethod
     def parallelogram(cls, turbines, acceptable, ratio=1, angle=_np.pi/3,
@@ -378,11 +377,11 @@ class Layout():
                 y=grid.j * row_sep
             )
             """Flatten data structure and create initial layout"""
-            layout = cls.Layout(grid.stack(pos=('i', 'j')))
+            layout = cls.Layout(grid.stack(index=('i', 'j')))
             """Apply grid rotation and grid shift"""
             rot_cos = _np.cos(rotation)
             rot_sin = _np.sin(rotation)
-            layout['x'], layout['y'] = (
+            layout.absolute['x'], layout.absolute['y'] = (
                 layout.x * rot_cos - layout.y * rot_sin + shift[0] * col_sep,
                 layout.x * rot_sin + layout.y * rot_cos + shift[1] * row_sep
             )
@@ -422,8 +421,8 @@ class Layout():
                     shift + rng.normal(scale=1/turbines, size=2), 1)
                 rotation = _np.remainder(
                     rotation + rng.normal(scale=_np.pi/turbines), _np.pi)
-        layout = layout[in_site]
-        layout.set_state(target=True, source=True)
+        layout.absolute = layout.absolute.sel(index=in_site)
+        layout.set_state(target=True, source=True, movable=True, context=False)
         return layout
 
     @classmethod
@@ -513,9 +512,10 @@ class Layout():
         origin = _xr.Dataset(coords={'r': [0.], 'theta': [_np.nan]})
         origin = origin.assign(x=(('r', 'theta'), [[0.]]),
                                y=(('r', 'theta'), [[0.]]))
-        layout = cls.Layout(_xr.concat([ds.stack(pos=('r', 'theta'))
-                                        for ds in [grid, origin]], 'pos'))
-        all_but_origin = _xr.full_like(layout.pos, True, bool)
-        all_but_origin.loc[dict(pos=(0., _np_nan)] = False
-        layout.set_state(target=all_but_origin, source=~all_but_origin)
+        layout = cls.Layout(_xr.concat([ds.stack(index=('r', 'theta'))
+                                        for ds in [grid, origin]], 'index'))
+        all_but_origin = _xr.full_like(layout.index, True, bool)
+        all_but_origin.loc[dict(index=(0., _np.nan))] = False
+        layout.set_state(target=all_but_origin, source=~all_but_origin,
+                         movable=False, context=True)
         return layout
