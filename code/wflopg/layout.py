@@ -286,6 +286,32 @@ class Layout():
                 (relxy / dists).rename({'x': 'x_normed', 'y': 'y_normed'}))
         return self.relative[['x_normed', 'y_normed']]
 
+    def get_relative_positions_along_wind(self, wind_vectors): # TODO: this depends on wind_vectors, so should a check be done to see if it is the same, if present?
+        """Get and, as needed, calculate relative positions along wind
+
+        Parameters
+        ----------
+        wind_vectors
+            An `xarray.Dataset` with `x` and `y` `xarray.DataArray`s
+            with a `direction` coordinate corresponding to all wind directions
+            considered. The variable `x` and `y` contain the coordinates of the
+            downwind wind direction unit vector.
+
+        Returns
+        -------
+        An `xarray.Dataset` with `downwind` and `crosswind` variables of
+        wind-direction-specific coordinates of the relative positions.
+
+        """
+        self._has_rel_check()
+        if not {'downwind', 'crosswind'}.issubset(self.relative.data_vars):
+            relxy = self.get_relative_positions()
+            self.relative['downwind'], self.relative['crosswind'] = (
+                relxy.x * wind_vectors.x + relxy.y * wind_vectors.y,
+                -relxy.x * wind_vectors.y + relxy.y * wind_vectors.x
+            )
+        return self.relative[['downwind', 'crosswind']]
+
     @classmethod
     def parallelogram(cls, turbines, acceptable, ratio=1, angle=_np.pi/3,
                       shift=None, rotation=None, randomize=False):
