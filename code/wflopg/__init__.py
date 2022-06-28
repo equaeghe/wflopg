@@ -191,10 +191,11 @@ class Owflop():
             self.thrust_curve = create_turbine.constant_thrust_curve(
                 self.cut_in, self.cut_out, self.thrust_coefficient)
 
-    def load_site(self, filename, options):
+    def load_site(self, filename, options=None):
         with open(filename) as f:
             site = _yaml_load(f)
-        site.update(options)
+        if options not None:
+            site.update(options)
         self.roughness_length = site.get('roughness', None)
         self.site_radius = site['radius'] * 1e3  # km to m
         if 'location' in site:
