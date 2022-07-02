@@ -58,6 +58,7 @@ class Owflop():
         # extract and process information and data from linked documents
         self.load_turbine(problem['turbine'])
         site_file = problem['site']
+        site_options = None
         if isinstance(site, str):
             site_file = site
         elif isinstance(site, dict):
@@ -194,7 +195,7 @@ class Owflop():
     def load_site(self, filename, options=None):
         with open(filename) as f:
             site = _yaml_load(f)
-        if options not None:
+        if options is not None:
             site.update(options)
         self.roughness_length = site.get('roughness', None)
         self.site_radius = site['radius'] * 1e3  # km to m
