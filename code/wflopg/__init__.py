@@ -82,8 +82,13 @@ class Owflop():
             if 'filename' in wind_resource:
                 wind_resource_file = wind_resource['filename']
                 del wind_resource['filename']
+            if 'wind_rose' in wind_resource:
+                wind_rose = wind_resource['wind_rose']
+                del wind_resource['wind_rose']
+            else:
+                wind_rose = None
             wind_resource_options.update(wind_resource)
-        self.load_wind_resource(wind_resource_file)
+        self.load_wind_resource(wind_resource_file, wind_rose)
         self.wind_shear = create_wind.logarithmic_wind_shear(
             self.reference_height, self.roughness_length)
         self.process_wind_resource(
@@ -222,7 +227,7 @@ class Owflop():
         if self.site_boundaries is not None:
             self.boundaries = create_site.boundaries(self.site_boundaries)
 
-    def load_wind_resource(self, filename):
+    def load_wind_resource(self, filename, wind_rose=None):
         with open(filename) as f:
             wind_resource = _yaml_load(f)
         self.reference_height = wind_resource['reference_height']
@@ -232,7 +237,8 @@ class Owflop():
         self.turbulence_intensity = wind_resource.get(
             'turbulence_intensity', None)
 
-        wind_rose = wind_resource['wind_rose']
+        if not wind_rose:
+            wind_rose = wind_resource['wind_rose']
         dirs = _np.array(wind_rose['directions'])
         # we do not assume the wind directions are sorted in the data file and
         # therefore sort them here
